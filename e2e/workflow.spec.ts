@@ -1,0 +1,120 @@
+import { test, expect } from '@playwright/test';
+
+test('receive stock, sell at an adjusted price, reject overselling, and retain history', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Overview.' })).toBeVisible();
+  await page.screenshot({ path: '.playwright/desktop.png', fullPage: true });
+  await page.getByRole('button', { name: 'Settings & data' }).click();
+  await page.getByRole('button', { name: 'Clear sample data' }).click();
+  await page.getByRole('button', { name: 'Yes, clear workspace' }).click();
+  await page.getByRole('button', { name: 'Customers', exact: true }).click();
+  await page.getByRole('button', { name: 'Add customer', exact: true }).click();
+  await page.getByLabel('Restaurant / customer name *').fill('Test Restaurant');
+  await page.getByLabel('Contact person').fill('Alex');
+  await page.getByRole('button', { name: 'Add customer', exact: true }).last().click();
+  await expect(page.getByRole('heading', { name: 'Test Restaurant' })).toBeVisible();
+  await page.getByRole('button', { name: /^Products/ }).click();
+  await page.getByRole('button', { name: 'Add product', exact: true }).click();
+  await page.getByLabel('Product name *').fill('Test Rice');
+  await page.getByLabel('Selling unit *').selectOption('kg');
+  await page.getByLabel('Default selling price *').fill('3.20');
+  await page.getByLabel('Purchase cost').fill('2');
+  await page.getByRole('button', { name: 'Add product', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Receive Test Rice', exact: true }).click();
+  await page.getByLabel('Quantity received (kg) *').fill('12.5');
+  await page.getByRole('button', { name: 'Receive stock', exact: true }).click();
+  await expect(page.getByRole('row', { name: /Test Rice/ })).toContainText('12.5');
+  await page.getByRole('button', { name: 'Sales', exact: true }).click();
+  await page.getByRole('button', { name: 'New sale', exact: true }).click();
+  await page.getByLabel('Customer *').selectOption({ label: 'Test Restaurant' });
+  await page.getByLabel('Product 1', { exact: true }).selectOption({ label: 'Test Rice (kg)' });
+  await expect(page.getByLabel('Price 1', { exact: true })).toHaveValue('3.2');
+  await page.getByLabel('Quantity 1', { exact: true }).fill('2.5');
+  await page.getByLabel('Price 1', { exact: true }).fill('4');
+  await page.getByRole('button', { name: 'Record sale' }).click();
+  await expect(page.getByRole('row', { name: /SO-1001/ })).toContainText('€10.00');
+  await page.reload();
+  await page.getByRole('button', { name: /^Products/ }).click();
+  await expect(page.getByRole('row', { name: /Test Rice/ })).toContainText('10');
+  await expect(page.getByRole('row', { name: /Test Rice/ })).toContainText('€3.20');
+  await page.getByRole('button', { name: 'Edit Test Rice', exact: true }).click();
+  await page.getByLabel('Default selling price *').fill('8');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await page.getByRole('button', { name: 'Sales', exact: true }).click();
+  await page.getByRole('button', { name: 'New sale', exact: true }).click();
+  await page.getByLabel('Customer *').selectOption({ label: 'Test Restaurant' });
+  await page.getByLabel('Product 1', { exact: true }).selectOption({ label: 'Test Rice (kg)' });
+  await page.getByLabel('Quantity 1', { exact: true }).fill('6');
+  await page.getByRole('button', { name: 'Add another item' }).click();
+  await page.getByLabel('Product 2', { exact: true }).selectOption({ label: 'Test Rice (kg)' });
+  await page.getByLabel('Quantity 2', { exact: true }).fill('6');
+  await page.getByRole('button', { name: 'Record sale' }).click();
+  await expect(page.getByRole('alert')).toContainText('Not enough stock');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'SO-1001', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('€10.00');
+  await expect(page.getByRole('dialog')).toContainText('€4.00');
+  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByRole('button', { name: 'Stock movements', exact: true }).click();
+  await expect(page.getByRole('row', { name: /Test Rice.*Received/ })).toContainText('+12.5');
+  await expect(page.getByRole('row', { name: /Test Rice.*Sold/ })).toContainText('−2.5');
+  expect(errors).toEqual([]);
+});
+
+test('mobile navigation, responsive layout, and settings currency work', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Overview.' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: '.playwright/mobile.png', fullPage: true });
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  await page.getByRole('button', { name: /^Products/ }).click();
+  await expect(page.getByRole('heading', { name: 'Products.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  await page.getByRole('button', { name: 'Settings & data' }).click();
+  await page.getByLabel('Business currency').selectOption('USD');
+  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await expect(page.getByRole('row', { name: /Coca-Cola Original/ })).toContainText('US$22.00');
+});
+
+test('export and restore preserve data, and a malformed backup is rejected', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings & data' }).click();
+  const downloadEvent = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export backup' }).click();
+  const download = await downloadEvent;
+  await download.saveAs('.playwright/backup.json');
+  await page.getByRole('button', { name: 'Clear sample data' }).click();
+  await page.getByRole('button', { name: 'Yes, clear workspace' }).click();
+  await page.getByRole('button', { name: 'Settings & data' }).click();
+  await page.locator('input[type=file]').setInputFiles({name:'invalid.json',mimeType:'application/json',buffer:Buffer.from('{"version":1,"store":{}}')});
+  await expect(page.getByRole('alert')).toBeVisible();
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('input[type=file]').setInputFiles('.playwright/backup.json');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.reload();
+  await page.getByRole('button', { name: /^Products/ }).click();
+  await expect(page.getByRole('row', { name: /San Pellegrino/ })).toBeVisible();
+});
+
+test('damaged saved data is protected and explicit clearing restores saving', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('damage-applied')) {
+      localStorage.setItem('stockroom.workspace.v1', '{bad data');
+      sessionStorage.setItem('damage-applied', 'true');
+    }
+  });
+  await page.goto('/');
+  await expect(page.getByRole('alert')).toContainText('Automatic saving is paused');
+  expect(await page.evaluate(() => localStorage.getItem('stockroom.workspace.v1'))).toBe('{bad data');
+  await page.getByRole('button', { name: 'Settings & data' }).click();
+  await page.getByRole('button', { name: 'Clear sample data' }).click();
+  await page.getByRole('button', { name: 'Yes, clear workspace' }).click();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.getByRole('button', { name: /^Products/ }).click();
+  await expect(page.getByText('No products here yet')).toBeVisible();
+});
