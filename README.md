@@ -41,3 +41,15 @@ npm run test:e2e
 ```
 
 The browser tests use `/usr/bin/chromium` in this cloud environment; adjust `playwright.config.ts` to use another installed Chromium executable when running elsewhere. The test runner starts Vite if needed. Tests cover stock receipts, price overrides, overselling protection, preserved sale history, browser persistence, backup restoration, damaged-data recovery, mobile navigation, and currency settings. Screenshots are generated in the ignored `.playwright/` directory.
+
+## Open the hosted app with GitHub Pages
+
+A static build is published to the `gh-pages` branch. To activate hosting, open this repository’s **Settings → Pages**, select **Deploy from a branch**, choose **gh-pages** and **/ (root)**, then click **Save**. GitHub will show the live site URL after deployment. Hosting availability depends on the repository’s visibility and GitHub plan.
+
+To rebuild for this project’s hosted path, run:
+
+```sh
+npm run build -- --base /first_project/
+```
+
+The output in `dist/` must be published to `gh-pages` after source changes. Saving source on `main` alone does not update that static branch. Use the URL reported by GitHub Pages; the local cloud development server is not a public preview.
